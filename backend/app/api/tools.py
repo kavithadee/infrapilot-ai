@@ -37,7 +37,9 @@ def test_tool(
             detail=f"Tool '{tool_name}' not found. Available: {list(TOOL_REGISTRY.keys())}",
         )
 
-    # Create throwaway incident + run so tool_calls FK constraint is satisfied
+    # Create throwaway incident + run so tool_calls FK constraint is satisfied.
+    # Both rows are marked completed/failed before returning so they don't
+    # accumulate permanently as 'pending' on repeated test calls.
     incident = repo.create_incident(
         db,
         title=f"[dev-test] {tool_name}",
@@ -54,7 +56,12 @@ def test_tool(
             sequence_num=1,
         )
     except Exception as e:
+        repo.update_run_status(db, run.id, status="failed")
+        repo.update_incident_status(db, incident.id, status="closed")
         raise HTTPException(status_code=422, detail=str(e))
+
+    repo.update_run_status(db, run.id, status="completed")
+    repo.update_incident_status(db, incident.id, status="closed")
 
     return {
         "tool": tool_name,

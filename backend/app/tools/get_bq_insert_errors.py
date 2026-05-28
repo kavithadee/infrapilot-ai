@@ -36,19 +36,16 @@ class GetBqInsertErrorsTool(BaseTool):
     ) -> GetBqInsertErrorsOutput:
         # Anchor to the most recent BQ error timestamp (same pattern as get_service_logs)
         # so time_window is meaningful against fixed seed data.
+        # Build the table_name filter once so anchor and main query stay in sync.
         anchor_query = db.query(func.max(SimulatedBqError.timestamp))
-        if input.table_name:
-            anchor_query = anchor_query.filter(
-                SimulatedBqError.table_name == input.table_name
-            )
-        anchor = anchor_query.scalar()
-
         query = db.query(SimulatedBqError)
 
         if input.table_name:
-            query = query.filter(
-                SimulatedBqError.table_name == input.table_name
-            )
+            table_filter = SimulatedBqError.table_name == input.table_name
+            anchor_query = anchor_query.filter(table_filter)
+            query = query.filter(table_filter)
+
+        anchor = anchor_query.scalar()
 
         if anchor is not None:
             cutoff = anchor - parse_time_window(input.time_window)

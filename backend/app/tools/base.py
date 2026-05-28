@@ -70,6 +70,14 @@ class BaseTool(ABC):
             The tool result as a plain dict (JSON-serialisable).
         """
         start = time.time()
+
+        # ------------------------------------------------------------------
+        # 0. Validate input up-front (before cache check so cache hits are
+        #    also gated on valid input — prevents stale results masking bad
+        #    arguments when the cache key omits a field).
+        # ------------------------------------------------------------------
+        validated_input = self.input_schema(**raw_input)
+
         cache_key = self._build_cache_key(raw_input)
         cache_hit = False
         result: dict | None = None
@@ -93,23 +101,30 @@ class BaseTool(ABC):
         # ------------------------------------------------------------------
         if not cache_hit:
             try:
-                validated_input = self.input_schema(**raw_input)
                 output = self.execute(validated_input, db)
                 result = output.model_dump()
             except Exception as e:
                 latency_ms = int((time.time() - start) * 1000)
-                repo.log_tool_call(
-                    db,
-                    run_id=run_id,
-                    tool_name=self.name,
-                    input_json=raw_input,
-                    output_json=None,
-                    latency_ms=latency_ms,
-                    cache_hit=False,
-                    sequence_num=sequence_num,
-                    status="error",
-                    error_message=str(e),
-                )
+                try:
+                    repo.log_tool_call(
+                        db,
+                        run_id=run_id,
+                        tool_name=self.name,
+                        input_json=raw_input,
+                        output_json=None,
+                        latency_ms=latency_ms,
+                        cache_hit=False,
+                        sequence_num=sequence_num,
+                        status="error",
+                        error_message=str(e),
+                    )
+                except Exception as log_err:
+                    # Never let a logging failure hide the original tool error.
+                    logger.warning(
+                        "tool_call_log_failed",
+                        tool=self.name,
+                        log_error=str(log_err),
+                    )
                 logger.error(
                     "tool_execute_failed",
                     tool=self.name,

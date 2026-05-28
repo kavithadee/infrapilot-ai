@@ -21,7 +21,8 @@ class GetRecentDeploysTool(BaseTool):
     cache_ttl = 300  # 5 minutes
 
     def _build_cache_key(self, raw_input: dict) -> str:
-        return f"deploys:{raw_input.get('service_name', '')}"
+        limit = raw_input.get("limit", 5)
+        return f"deploys:{raw_input.get('service_name', '')}:{limit}"
 
     def execute(
         self, input: GetRecentDeploysInput, db: Session

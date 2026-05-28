@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -23,12 +24,13 @@ async def lifespan(app: FastAPI):
     configure_logging(level="DEBUG" if settings.is_development else "INFO")
     logger.info("startup_begin", version=settings.app_version, env=settings.environment)
 
-    # Create all DB tables (no Alembic in V1)
-    create_all()
+    # Create all DB tables (no Alembic in V1).
+    # Run in a thread pool so sync SQLAlchemy calls don't block the event loop.
+    await asyncio.to_thread(create_all)
     logger.info("db_tables_created")
 
-    # Seed simulation data (idempotent — skips if already seeded)
-    run_seed()
+    # Seed simulation data (idempotent — skips if already seeded).
+    await asyncio.to_thread(run_seed)
     logger.info("startup_complete")
 
     yield

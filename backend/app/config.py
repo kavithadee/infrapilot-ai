@@ -8,8 +8,9 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # OpenAI
-    openai_api_key: str
+    # OpenAI — default "" so the app starts (and /health works) without a key;
+    # the agent will fail with a clear 401 from OpenAI if a run is attempted.
+    openai_api_key: str = ""
     agent_model: str = "gpt-4o"
 
     # App

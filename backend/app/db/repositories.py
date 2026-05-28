@@ -106,6 +106,15 @@ def update_run_failed(db: Session, run_id: UUID, *, error_message: str) -> None:
     db.commit()
 
 
+def update_run_status(db: Session, run_id: UUID, *, status: str) -> None:
+    """Lightweight status-only update — used by dev endpoints to close throwaway runs."""
+    db.query(InvestigationRun).filter(InvestigationRun.id == run_id).update({
+        "status": status,
+        "completed_at": datetime.now(timezone.utc),
+    })
+    db.commit()
+
+
 # ---------------------------------------------------------------------------
 # Tool Calls
 # ---------------------------------------------------------------------------

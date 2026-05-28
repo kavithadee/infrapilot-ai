@@ -29,7 +29,8 @@ class GetServiceLogsTool(BaseTool):
         service = raw_input.get("service_name", "")
         window = raw_input.get("time_window", "1h")
         severity = raw_input.get("severity") or "all"
-        return f"logs:{service}:{window}:{severity}"
+        limit = raw_input.get("limit", 50)
+        return f"logs:{service}:{window}:{severity}:{limit}"
 
     def execute(
         self, input: GetServiceLogsInput, db: Session
