@@ -6,13 +6,14 @@ from fastapi import FastAPI
 from app.config import settings
 from app.core.db import create_all
 from app.core.logging import configure_logging, get_logger
+from app.core.middleware import RequestLoggingMiddleware
 from app.seed.seed_data import run_seed
 
 # Routers — Day 1
 from app.api import health, tools
 
-# Routers — Day 2 (uncomment as implemented)
-# from app.api import incidents, runs
+# Routers — Day 2
+from app.api import incidents, runs
 
 logger = get_logger(__name__)
 
@@ -50,9 +51,10 @@ app = FastAPI(
 # Routers
 # ---------------------------------------------------------------------------
 
+app.add_middleware(RequestLoggingMiddleware)
+
 app.include_router(health.router, tags=["health"])
 app.include_router(tools.router, tags=["dev"])
 
-# Day 2 — uncomment as implemented:
-# app.include_router(incidents.router, prefix="/incidents", tags=["incidents"])
-# app.include_router(runs.router, prefix="/runs", tags=["runs"])
+app.include_router(incidents.router, prefix="/incidents", tags=["incidents"])
+app.include_router(runs.router, prefix="/runs", tags=["runs"])

@@ -179,30 +179,30 @@ Defined in `app/config.py` via pydantic-settings. Loaded from `.env` (copy from 
 ### Day 2 — Agent + API + End-to-End
 
 #### Report + Incident Schemas
-- [ ] `app/schemas/report.py` — TimelineItem, EvidenceItem, RecommendedAction, InvestigationReport Pydantic models
-- [ ] `app/schemas/incident.py` — CreateIncidentRequest, CreateIncidentResponse, IncidentDetail
+- [x] `app/schemas/report.py` — TimelineItem, EvidenceItem, RecommendedAction, InvestigationReport Pydantic models
+- [x] `app/schemas/incident.py` — CreateIncidentRequest, CreateIncidentResponse, IncidentDetail
 
 #### Agent
-- [ ] `app/agents/investigator.py` — OpenAI tool-calling loop (max 8 iterations, must call ≥3 infra tools before generate_report)
-- [ ] `app/agents/report_builder.py` — parse + Pydantic validate final JSON, retry once on failure
-- [ ] Wire `generate_report` as finalization tool in OpenAI spec (not in TOOL_REGISTRY, not logged as infra call)
+- [x] `app/agents/investigator.py` — OpenAI tool-calling loop (max 8 iterations, must call ≥3 infra tools before generate_report)
+- [x] `app/agents/report_builder.py` — parse + Pydantic validate final JSON, retry once on failure
+- [x] Wire `generate_report` as finalization tool in OpenAI spec (not in TOOL_REGISTRY, not logged as infra call)
 
 #### API Endpoints
-- [ ] `app/api/incidents.py` — POST /incidents (create rows + BackgroundTask), GET /incidents
-- [ ] `app/api/runs.py` — GET /runs/{run_id}, GET /runs/{run_id}/tool-calls
+- [x] `app/api/incidents.py` — POST /incidents (create rows + BackgroundTask), GET /incidents
+- [x] `app/api/runs.py` — GET /runs/{run_id}, GET /runs/{run_id}/tool-calls
 
 #### Middleware + Timeouts
-- [ ] `app/core/middleware.py` — FastAPI request logging middleware (method, path, status code, latency ms)
-- [ ] Wire middleware in `app/main.py`
-- [ ] Add OpenAI `timeout=30` in agent loop — prevents hanging on slow/failed API calls
+- [x] `app/core/middleware.py` — FastAPI request logging middleware (method, path, status code, latency ms)
+- [x] Wire middleware in `app/main.py`
+- [x] Add OpenAI `timeout=30` in agent loop — prevents hanging on slow/failed API calls
 
 #### Telemetry Stubs
-- [ ] `app/telemetry/otel.py` — TODO stubs with comments for future OTel spans
+- [x] `app/telemetry/otel.py` — TODO stubs with comments for future OTel spans
 
 #### Manual End-to-End
-- [ ] Submit Scenario 1, watch logs, confirm tool calls in Postgres, verify report JSON
-- [ ] Confirm Redis cache hit on second identical tool call
-- [ ] Confirm GET /runs/{run_id} returns completed report with evidence + timeline + confidence score
+- [x] Submit Scenario 1, watch logs, confirm tool calls in Postgres, verify report JSON
+- [x] Confirm Redis cache hit on second identical tool call
+- [x] Confirm GET /runs/{run_id} returns completed report with evidence + timeline + confidence score
 
 **Day 2 Checkpoint:** Scenario 1 (BigQuery auth) produces a full report with ≥3 infra tool calls, stored in Postgres ✓
 
