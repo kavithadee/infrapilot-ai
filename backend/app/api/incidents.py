@@ -7,6 +7,7 @@ from app.core.db import get_db
 from app.db import repositories as repo
 from app.schemas.incident import CreateIncidentRequest, CreateIncidentResponse, IncidentDetail
 
+
 router = APIRouter()
 
 
@@ -28,17 +29,13 @@ def create_incident(
           -H "Content-Type: application/json" \\
           -d '{"title":"BQ writes stopped","description":"lat-cron-job stopped writing...","service_name":"lat-cron-job","severity":"high"}'
     """
-    incident = repo.create_incident(
+    # Create both rows atomically — if either insert fails, neither is committed.
+    incident, run = repo.create_incident_and_run(
         db,
         title=body.title,
         description=body.description,
         service_name=body.service_name,
         severity=body.severity,
-    )
-
-    run = repo.create_run(
-        db,
-        incident_id=incident.id,
         agent_model=settings.agent_model,
     )
 

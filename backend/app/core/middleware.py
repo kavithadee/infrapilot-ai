@@ -21,16 +21,26 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         start = time.time()
-        response = await call_next(request)
-        latency_ms = int((time.time() - start) * 1000)
-
-        level = "debug" if request.url.path == "/health" else "info"
-        getattr(logger, level)(
-            "http_request",
-            method=request.method,
-            path=request.url.path,
-            status=response.status_code,
-            latency_ms=latency_ms,
-        )
-
-        return response
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            return response
+        except Exception as exc:
+            logger.error(
+                "http_request_unhandled_error",
+                method=request.method,
+                path=request.url.path,
+                error=str(exc),
+            )
+            raise
+        finally:
+            latency_ms = int((time.time() - start) * 1000)
+            level = "debug" if request.url.path == "/health" else "info"
+            getattr(logger, level)(
+                "http_request",
+                method=request.method,
+                path=request.url.path,
+                status=status_code,
+                latency_ms=latency_ms,
+            )

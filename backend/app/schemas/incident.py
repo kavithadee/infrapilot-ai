@@ -1,7 +1,8 @@
+import re
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CreateIncidentRequest(BaseModel):
@@ -20,6 +21,16 @@ class CreateIncidentRequest(BaseModel):
             "Examples: '1h', '2h', '6h', '24h'."
         ),
     )
+
+    @field_validator("time_window")
+    @classmethod
+    def validate_time_window(cls, v: str) -> str:
+        """Accept formats like '1h', '30m', '6h', '24h'. Reject free-form strings."""
+        if not re.fullmatch(r"\d+[mh]", v):
+            raise ValueError(
+                f"time_window must be a number followed by 'm' or 'h' (e.g. '2h', '30m'). Got: {v!r}"
+            )
+        return v
 
 
 class CreateIncidentResponse(BaseModel):

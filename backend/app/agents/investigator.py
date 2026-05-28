@@ -42,6 +42,37 @@ MIN_INFRA_TOOLS = 3
 # generate_report tool spec (finalization-only — never in TOOL_REGISTRY)
 # ---------------------------------------------------------------------------
 
+def _inline_refs(schema: dict) -> dict:
+    """
+    Recursively resolve all $ref / $defs in a JSON Schema dict so that
+    OpenAI sees a flat schema without any references.
+
+    Pydantic v2's model_json_schema() produces $defs for nested models.
+    OpenAI's function-calling API does NOT resolve $ref, so the LLM
+    receives an empty schema for nested objects and omits those fields.
+    This resolver inlines every $ref in-place before the spec is sent.
+    """
+    defs = schema.get("$defs", {})
+
+    def resolve(node: dict) -> dict:
+        if "$ref" in node:
+            ref_name = node["$ref"].split("/")[-1]
+            return resolve(dict(defs.get(ref_name, {})))
+        result = {}
+        for key, value in node.items():
+            if key == "$defs":
+                continue  # drop the definitions block from output
+            if isinstance(value, dict):
+                result[key] = resolve(value)
+            elif isinstance(value, list):
+                result[key] = [resolve(item) if isinstance(item, dict) else item for item in value]
+            else:
+                result[key] = value
+        return result
+
+    return resolve(schema)
+
+
 _GENERATE_REPORT_SPEC: dict = {
     "type": "function",
     "function": {
@@ -53,7 +84,7 @@ _GENERATE_REPORT_SPEC: dict = {
             "The report must include a root cause, supporting evidence from each tool you called, "
             "a chronological timeline, and concrete recommended actions."
         ),
-        "parameters": InvestigationReport.model_json_schema(),
+        "parameters": _inline_refs(InvestigationReport.model_json_schema()),
     },
 }
 
@@ -237,7 +268,14 @@ def _investigate(run_id: UUID, db, time_window: str = "2h") -> None:
 
             try:
                 raw_args = json.loads(tool_call.function.arguments)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as json_err:
+                logger.warning(
+                    "tool_args_json_decode_failed",
+                    run_id=str(run_id),
+                    tool_name=tool_name,
+                    raw=tool_call.function.arguments[:200],
+                    error=str(json_err),
+                )
                 raw_args = {}
 
             if tool_name == "generate_report":
@@ -262,6 +300,10 @@ def _investigate(run_id: UUID, db, time_window: str = "2h") -> None:
                     print(f"[InfraPilot] ✓ Investigation complete!", flush=True)
                     investigation_complete = True
                     break  # stop processing further tool calls in this batch
+                elif tool_result["status"] == "retry_exhausted":
+                    print(f"[InfraPilot]    ✗ generate_report validation failed — retries exhausted", flush=True)
+                    investigation_complete = True
+                    break  # run already marked failed; stop processing
                 elif tool_result["status"] == "too_early":
                     print(f"[InfraPilot]    ✗ generate_report rejected: not enough tools yet", flush=True)
                 elif tool_result["status"] == "retry":
@@ -269,8 +311,10 @@ def _investigate(run_id: UUID, db, time_window: str = "2h") -> None:
 
             else:
                 # Infra tool call
-                print(f"[InfraPilot]    → {tool_name}({list(json.loads(tool_call.function.arguments).keys()) if tool_call.function.arguments else ''})", flush=True)
-                sequence_num += 1
+                print(f"[InfraPilot]    → {tool_name}({list(raw_args.keys())})", flush=True)
+                # Only advance sequence_num for tools that exist in the registry
+                if tool_name in TOOL_REGISTRY:
+                    sequence_num += 1
                 result_content = _handle_infra_tool(
                     tool_name=tool_name,
                     raw_args=raw_args,
@@ -431,7 +475,7 @@ def _message_to_dict(message) -> dict:
     Avoids model_dump() to control exactly what fields are included.
     """
     d: dict = {"role": message.role}
-    if message.content:
+    if message.content is not None:
         d["content"] = message.content
     if message.tool_calls:
         d["tool_calls"] = [

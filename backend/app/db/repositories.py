@@ -31,6 +31,43 @@ def create_incident(
     return incident
 
 
+def create_incident_and_run(
+    db: Session,
+    *,
+    title: str,
+    description: str,
+    service_name: str,
+    severity: str = "high",
+    agent_model: str,
+) -> tuple[Incident, InvestigationRun]:
+    """
+    Create an Incident and its first InvestigationRun atomically.
+
+    Both rows are committed in a single transaction so the DB is never
+    left with an incident that has no associated run (or vice-versa).
+    """
+    incident = Incident(
+        title=title,
+        description=description,
+        service_name=service_name,
+        severity=severity,
+        status="open",
+    )
+    db.add(incident)
+    db.flush()  # obtain incident.id without committing yet
+
+    run = InvestigationRun(
+        incident_id=incident.id,
+        agent_model=agent_model,
+        status="pending",
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(incident)
+    db.refresh(run)
+    return incident, run
+
+
 def get_incident(db: Session, incident_id: UUID) -> Incident | None:
     return db.query(Incident).filter(Incident.id == incident_id).first()
 
