@@ -1,0 +1,18 @@
+# Local dev / IDE requirements — used only for type checking and editor support.
+# psycopg2-binary is unpinned here because the pinned version (2.9.10) has no
+# pre-built wheel for all local Python/platform combinations. Docker always uses
+# the pinned version from requirements.txt.
+
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.36
+psycopg2-binary          # unpinned — picks the latest wheel for your platform
+redis==5.2.0
+openai==1.54.3
+pydantic==2.9.2
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.27.2
+python-multipart==0.0.12
