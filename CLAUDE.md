@@ -211,15 +211,15 @@ Defined in `app/config.py` via pydantic-settings. Loaded from `.env` (copy from 
 ### Day 3 — Scenario 2 + Tests + README + Polish
 
 #### Scenario Verification
-- [ ] Submit Scenario 2 (api-service latency spike), verify agent rules out deploy, identifies DB connection pool exhaustion
-- [ ] Submit Scenario 3 (audit-service silent data loss), verify agent calls BQ errors + config diff, identifies schema migration gap
+- [x] Submit Scenario 2 (api-service latency spike), verify agent rules out deploy, identifies DB connection pool exhaustion
+- [x] Submit Scenario 3 (audit-service silent data loss), verify agent calls BQ errors + config diff, identifies schema migration gap
 
 #### Tests
-- [ ] `tests/unit/test_tools.py` — one test per tool against seeded DB
-- [ ] `tests/unit/test_cache.py` — assert second call returns cache_hit=true in DB
-- [ ] `tests/unit/test_report_schema.py` — valid report passes, missing field raises ValidationError
-- [ ] `tests/integration/test_api.py` — POST /incidents → completed run → ≥3 infra tool calls persisted (mocked OpenAI)
-- [ ] `tests/conftest.py` — test DB setup, test Redis, seeded fixtures
+- [x] `tests/unit/test_tools.py` — one test per tool against seeded DB
+- [x] `tests/unit/test_cache.py` — assert second call returns cache_hit=true in DB
+- [x] `tests/unit/test_report_schema.py` — valid report passes, missing field raises ValidationError
+- [x] `tests/integration/test_api.py` — POST /incidents → completed run → ≥3 infra tool calls persisted (mocked OpenAI)
+- [x] `tests/conftest.py` — test DB setup, test Redis, seeded fixtures
 
 #### README
 - [ ] Project goal + context

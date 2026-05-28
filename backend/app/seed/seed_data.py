@@ -34,15 +34,20 @@ def _already_seeded(db, service_name: str, version: str) -> bool:
     )
 
 
+def seed_with_db(db) -> None:
+    """Seed all scenarios into an existing DB session. Used by tests."""
+    for service_name, version, module, label in _SCENARIO_SENTINELS:
+        if _already_seeded(db, service_name, version):
+            logger.info("seed_skipped", scenario=label, reason="already seeded")
+        else:
+            module.seed(db)
+            logger.info("seed_complete", scenario=label)
+
+
 def run_seed() -> None:
     db = SessionLocal()
     try:
-        for service_name, version, module, label in _SCENARIO_SENTINELS:
-            if _already_seeded(db, service_name, version):
-                logger.info("seed_skipped", scenario=label, reason="already seeded")
-            else:
-                module.seed(db)
-                logger.info("seed_complete", scenario=label)
+        seed_with_db(db)
     except Exception as e:
         logger.error("seed_failed", error=str(e))
         raise
