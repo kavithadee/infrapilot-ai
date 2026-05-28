@@ -158,10 +158,9 @@ def test_invalid_priority_raises():
 def test_format_validation_error_is_non_empty():
     data = _valid_report_dict()
     del data["likely_root_cause"]
-    try:
+    with pytest.raises(ReportValidationError) as exc_info:
         build_report(data)
-    except ReportValidationError as e:
-        msg = format_validation_error_for_llm(e)
-        assert isinstance(msg, str)
-        assert len(msg) > 20
-        assert "likely_root_cause" in msg
+    msg = format_validation_error_for_llm(exc_info.value)
+    assert isinstance(msg, str)
+    assert len(msg) > 20
+    assert "likely_root_cause" in msg

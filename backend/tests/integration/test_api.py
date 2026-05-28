@@ -81,13 +81,11 @@ def client(integration_db_engine):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    with patch("app.tools.base.redis_get", return_value=None), \
-         patch("app.tools.base.redis_set", return_value=None), \
-         patch("app.agents.investigator.SessionLocal", TestSessionLocal):
+    with patch("app.agents.investigator.SessionLocal", TestSessionLocal):
         with TestClient(app, raise_server_exceptions=True) as c:
             yield c
 
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_db, None)
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +165,7 @@ def _build_openai_mock():
         # Iteration 2: logs + BQ errors
         [
             _tool_call("get_service_logs", {"service_name": "lat-cron-job", "time_window": "2h", "severity": "ERROR"}),
-            _tool_call("get_bq_insert_errors", {"table_name": "analytics.user_events", "time_window": "2h"}),
+            _tool_call("get_bq_insert_errors", {"table_name": "analytics.daily_metrics", "time_window": "2h"}),
         ],
         # Iteration 3: config diff
         [_tool_call("get_config_diff", {"service_name": "lat-cron-job", "deploy_id": "v42"})],
@@ -180,7 +178,9 @@ def _build_openai_mock():
     def create_side_effect(**kwargs):
         i = call_count["n"]
         call_count["n"] += 1
-        tool_calls = iterations[min(i, len(iterations) - 1)]
+        if i >= len(iterations):
+            raise StopIteration(f"OpenAI mock exhausted after {len(iterations)} scripted iterations")
+        tool_calls = iterations[i]
         response = MagicMock()
         response.choices[0].message = _assistant_message(tool_calls)
         return response

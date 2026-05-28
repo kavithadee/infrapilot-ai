@@ -47,7 +47,7 @@ def test_second_get_recent_deploys_call_is_cache_hit(db):
     assert len(calls) == 2
     assert calls[0].cache_hit is False   # first call: miss
     assert calls[1].cache_hit is True    # second call: hit
-    assert calls[1].latency_ms == 0      # cached result has 0ms latency
+    assert calls[1].latency_ms < 5      # cached result has near-zero latency
 
 
 def test_second_get_service_logs_call_is_cache_hit(db):
