@@ -326,8 +326,22 @@ def _investigate(run_id: UUID, db, time_window: str = "2h") -> None:
                     sequence_num=sequence_num,
                 )
                 if tool_name in TOOL_REGISTRY:
-                    infra_tools_called.append(tool_name)
-                    print(f"[InfraPilot]       ✓ {tool_name} returned", flush=True)
+                    # Only count the call toward the MIN_INFRA_TOOLS gate if it succeeded.
+                    # _handle_infra_tool catches all exceptions and returns error JSON; we
+                    # check the result rather than catching here so the LLM can self-correct.
+                    try:
+                        parsed_result = json.loads(result_content)
+                        call_succeeded = "error" not in parsed_result
+                    except (json.JSONDecodeError, TypeError):
+                        call_succeeded = True  # treat unparseable output as success
+                    if call_succeeded:
+                        infra_tools_called.append(tool_name)
+                        print(f"[InfraPilot]       ✓ {tool_name} returned", flush=True)
+                    else:
+                        print(
+                            f"[InfraPilot]       ✗ {tool_name} returned error (not counted toward gate)",
+                            flush=True,
+                        )
 
                 messages.append({
                     "role": "tool",
