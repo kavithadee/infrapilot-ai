@@ -10,7 +10,10 @@ class CreateIncidentRequest(BaseModel):
     description: str = Field(
         description="Full description of the symptoms and context — passed verbatim to the agent"
     )
-    service_name: str = Field(description="Name of the affected service (e.g. 'lat-cron-job')")
+    service_name: str = Field(
+        min_length=1,
+        description="Name of the affected service (e.g. 'lat-cron-job')",
+    )
     severity: str = Field(default="high", description="Incident severity: critical | high | medium | low")
     time_window: str = Field(
         default="2h",
