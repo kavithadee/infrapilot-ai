@@ -155,11 +155,12 @@ class GetK8sPodStatusOutput(BaseModel):
 # ---------------------------------------------------------------------------
 
 class GetBqInsertErrorsInput(BaseModel):
-    table_name: str | None = Field(
-        default=None,
+    table_name: str = Field(
         description=(
-            "BigQuery table name to filter errors for (e.g. 'analytics.daily_metrics'). "
-            "If omitted, returns all recent BQ insert errors across all tables."
+            "BigQuery destination table to check for insert errors "
+            "(e.g. 'analytics.daily_metrics', 'compliance.audit_events'). "
+            "Required — infer this from service logs (look for table references in error "
+            "messages) or deploy config changes before calling this tool."
         ),
     )
     time_window: str = Field(

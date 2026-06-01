@@ -30,23 +30,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# Local environment
-.env
-.env.*
-!.env.example
-
-# macOS / editor
-.DS_Store
-.vscode/
-
-# Python
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.venv/
-backend/.venv/
-
-# Frontend
-node_modules/
-dist/

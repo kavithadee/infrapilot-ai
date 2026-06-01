@@ -130,7 +130,7 @@ def test_get_k8s_pod_status_lat_cron_job_healthy(db):
 # ---------------------------------------------------------------------------
 
 def test_get_bq_insert_errors_auth_error_for_lat_cron_job(db):
-    """Scenario 1: lat-cron-job BQ table should have AUTH_ERROR entries."""
+    """Scenario 1: analytics.daily_metrics should have AUTH_ERROR entries and no SCHEMA_ERROR."""
     run_id = uuid.uuid4()
     tool = GetBqInsertErrorsTool()
     # Use a large time_window so all seeded rows are captured regardless of
@@ -144,10 +144,14 @@ def test_get_bq_insert_errors_auth_error_for_lat_cron_job(db):
     assert result["total_error_count"] > 0
     error_types = [e["error_type"] for e in result["errors"]]
     assert "AUTH_ERROR" in error_types
+    # Must not be contaminated with audit-service schema errors
+    assert "SCHEMA_ERROR" not in error_types
+    table_names = [e["table_name"] for e in result["errors"]]
+    assert all(t == "analytics.daily_metrics" for t in table_names)
 
 
 def test_get_bq_insert_errors_schema_error_for_audit_service(db):
-    """Scenario 3: audit-service BQ table should have SCHEMA_ERROR entries."""
+    """Scenario 3: compliance.audit_events should have SCHEMA_ERROR entries and no AUTH_ERROR."""
     run_id = uuid.uuid4()
     tool = GetBqInsertErrorsTool()
     result = tool.run(
@@ -159,6 +163,10 @@ def test_get_bq_insert_errors_schema_error_for_audit_service(db):
     assert result["total_error_count"] > 0
     error_types = [e["error_type"] for e in result["errors"]]
     assert "SCHEMA_ERROR" in error_types
+    # Must not be contaminated with lat-cron-job auth errors
+    assert "AUTH_ERROR" not in error_types
+    table_names = [e["table_name"] for e in result["errors"]]
+    assert all(t == "compliance.audit_events" for t in table_names)
 
 
 # ---------------------------------------------------------------------------

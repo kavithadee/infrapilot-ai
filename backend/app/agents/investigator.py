@@ -112,7 +112,10 @@ CrashLoopBackOff with 3+ restarts strongly indicates a startup failure. \
 A healthy Running pod with 0 restarts means the failure is logic/data, not crash.
 
 4. **get_bq_insert_errors** — Use this when the incident involves BigQuery, data pipelines, \
-or missing/delayed data. AUTH_ERROR indicates a credentials problem; \
+or missing/delayed data. You MUST provide `table_name` — look for it in service logs \
+(e.g. "BigQuery insert failed for table analytics.daily_metrics") or deploy config changes. \
+Never call this tool without a specific table name. \
+AUTH_ERROR indicates a credentials problem; \
 SCHEMA_ERROR indicates a code/schema mismatch (e.g., a new column was added in code \
 but the table was not migrated).
 
