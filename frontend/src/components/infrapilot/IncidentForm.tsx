@@ -38,7 +38,7 @@ export function IncidentForm() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim() || !form.description.trim()) return;
+    if (!form.title.trim() || !form.description.trim() || !form.service_name.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -83,6 +83,7 @@ export function IncidentForm() {
                 placeholder="lat-cron-job"
                 value={form.service_name}
                 onChange={(e) => update("service_name", e.target.value)}
+                required
               />
             </div>
             <div className="space-y-1.5">

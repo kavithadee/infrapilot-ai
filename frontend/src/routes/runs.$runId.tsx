@@ -38,59 +38,70 @@ function RunPage() {
   const [calls, setCalls] = useState<ToolCall[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // fetchedCallsRef: true once tool-calls have been successfully loaded for this run.
   const fetchedCallsRef = useRef(false);
-
-  // Reset per-run state whenever the run ID changes.
-  useEffect(() => {
-    setRun(null);
-    setCalls([]);
-    setLoading(true);
-    setError(null);
-    fetchedCallsRef.current = false;
-  }, [runId]);
+  // statusRef: mirrors run.status so the interval can read it without a stale closure
+  // or the React anti-pattern of calling setState just to peek at current value.
+  const statusRef = useRef<string | null>(null);
+  // inFlightRef: prevents concurrent loadAll() calls when a fetch takes longer than 2 s.
+  const inFlightRef = useRef(false);
 
   async function loadAll() {
+    if (inFlightRef.current) return; // skip tick if a previous fetch is still in-flight
+    inFlightRef.current = true;
     try {
       const r = await getRun(runId);
       setRun(r);
+      statusRef.current = r.status; // keep the ref in sync for the interval
       setError(null);
       if (TERMINAL.has(r.status) && !fetchedCallsRef.current) {
+        // Set optimistically so concurrent loadAll() calls don't double-fetch,
+        // but reset on transient failure so Refresh can retry.
         fetchedCallsRef.current = true;
         try {
           const c = await getToolCalls(runId);
           setCalls(c);
         } catch {
-          // tool-calls might 404 on failure; ignore
+          // Transient error — reset so the Refresh button can retry.
+          fetchedCallsRef.current = false;
         }
       } else if (r.status === "running") {
         try {
           const c = await getToolCalls(runId);
           setCalls(c);
         } catch {
-          /* ignore */
+          /* ignore — tool calls may not exist yet */
         }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load run");
     } finally {
       setLoading(false);
+      inFlightRef.current = false;
     }
   }
 
+  // Single effect: reset state and start polling whenever runId changes.
+  // Using statusRef (not a setRun updater) to read the current status in the
+  // interval avoids the React anti-pattern of issuing side-effects inside
+  // setState callbacks (which React Strict Mode double-invokes in development).
   useEffect(() => {
+    setRun(null);
+    setCalls([]);
+    setLoading(true);
+    setError(null);
+    fetchedCallsRef.current = false;
+    statusRef.current = null;
+    inFlightRef.current = false;
+
     loadAll();
 
     const id = setInterval(() => {
-      setRun((current) => {
-        // Read latest run status inside the updater to avoid stale closure.
-        if (!current || !TERMINAL.has(current.status)) {
-          loadAll();
-        } else {
-          // Run is terminal — stop polling.
-          clearInterval(id);
-        }
-        return current; // no state change, just peeking
-      });
+      if (!statusRef.current || !TERMINAL.has(statusRef.current)) {
+        loadAll();
+      } else {
+        clearInterval(id);
+      }
     }, 2000);
 
     return () => clearInterval(id);

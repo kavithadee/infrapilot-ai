@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     environment: str = "development"
     app_version: str = "0.1.0"
 
+    # CORS — comma-separated or JSON list of allowed origins.
+    # In production set this to your frontend URL, e.g.:
+    #   CORS_ORIGINS=["https://infrapilot-ai.vercel.app"]
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8080",
+    ]
+
     # Log backend — "postgres" (MVP) | "loki" (v1.5 optional extension)
     log_backend: str = "postgres"
 

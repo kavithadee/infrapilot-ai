@@ -79,7 +79,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!res.ok) {
-    throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+    // Surface FastAPI's structured error body (e.g. 422 validation detail) so the
+    // UI can show a field-level message rather than the opaque "422 Unprocessable Entity".
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === "string") {
+        detail = body.detail;
+      } else if (Array.isArray(body?.detail) && body.detail.length > 0) {
+        detail = body.detail.map((d: { msg?: string }) => d.msg ?? JSON.stringify(d)).join("; ");
+      }
+    } catch {
+      // body wasn't JSON — fall back to status text
+    }
+    throw new Error(`Request failed: ${detail}`);
   }
   return res.json() as Promise<T>;
 }
