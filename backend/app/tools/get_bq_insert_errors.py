@@ -14,36 +14,33 @@ from app.tools.base import BaseTool
 class GetBqInsertErrorsTool(BaseTool):
     name = "get_bq_insert_errors"
     description = (
-        "Retrieve recent BigQuery insert errors. "
+        "Retrieve recent BigQuery insert errors for a specific destination table. "
+        "You MUST supply table_name — infer it from service logs or deploy config before calling. "
         "Returns error type (AUTH_ERROR, SCHEMA_ERROR, PERMISSION_DENIED), "
-        "affected table, error message, and occurrence count. "
+        "error message, and occurrence count. "
         "AUTH_ERROR indicates a credentials or service account problem. "
         "SCHEMA_ERROR indicates a mismatch between the insert payload and the table schema — "
-        "check whether a recent deploy changed the schema file without running a table migration. "
-        "Optionally filter by table name; if omitted, returns all recent BQ errors."
+        "check whether a recent deploy changed the schema file without running a table migration."
     )
     input_schema = GetBqInsertErrorsInput
     output_schema = GetBqInsertErrorsOutput
     cache_ttl = 120  # 2 minutes
 
     def _build_cache_key(self, raw_input: dict) -> str:
-        table = raw_input.get("table_name") or "all"
+        table = raw_input.get("table_name", "unknown")
         window = raw_input.get("time_window", "1h")
         return f"bq:errors:{table}:{window}"
 
     def execute(
         self, input: GetBqInsertErrorsInput, db: Session
     ) -> GetBqInsertErrorsOutput:
-        # Anchor to the most recent BQ error timestamp (same pattern as get_service_logs)
-        # so time_window is meaningful against fixed seed data.
-        # Build the table_name filter once so anchor and main query stay in sync.
-        anchor_query = db.query(func.max(SimulatedBqError.timestamp))
-        query = db.query(SimulatedBqError)
-
-        if input.table_name:
-            table_filter = SimulatedBqError.table_name == input.table_name
-            anchor_query = anchor_query.filter(table_filter)
-            query = query.filter(table_filter)
+        # table_name is required — always filter to the specific table so
+        # errors from different seed scenarios never bleed into each other.
+        # Anchor to the most recent error for that table so time_window is
+        # meaningful against fixed seed data.
+        table_filter = SimulatedBqError.table_name == input.table_name
+        anchor_query = db.query(func.max(SimulatedBqError.timestamp)).filter(table_filter)
+        query = db.query(SimulatedBqError).filter(table_filter)
 
         anchor = anchor_query.scalar()
 
