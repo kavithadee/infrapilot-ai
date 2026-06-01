@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.core.db import create_all
@@ -51,6 +52,12 @@ app = FastAPI(
 # Routers
 # ---------------------------------------------------------------------------
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(health.router, tags=["health"])
