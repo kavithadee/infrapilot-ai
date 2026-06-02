@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Rules for Claude Code
+
+1. Execute **one task at a time**. Stop after each task and wait for the user to say "go" before starting the next one.
+2. After completing a task, mark it `- [x]` in this file in the same edit as the code change.
+3. **Always verify a change works locally before committing it.** Run the relevant service (`docker compose up --build`, curl, tests) and confirm the expected behavior before staging any commit.
+
 ## Project Overview
 
 InfraPilot AI is an agentic on-call debugging copilot. It accepts an incident description, runs an OpenAI tool-calling agent loop that queries simulated infrastructure data (deploys, logs, K8s status, BigQuery errors, config diffs), and returns a structured JSON investigation report with root cause, evidence, timeline, and recommended actions.
@@ -127,10 +133,6 @@ Defined in `app/config.py` via pydantic-settings. Loaded from `.env` (copy from 
 ---
 
 ## Implementation Plan & Todo
-
-> **Rules for Claude Code:**
-> 1. Execute **one task at a time**. Stop after each task and wait for the user to say "go" before starting the next one.
-> 2. After completing a task, mark it `- [x]` in this file in the same edit as the code change.
 
 ### Day 1 — Foundation + Data + Tools
 

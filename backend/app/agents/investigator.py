@@ -35,8 +35,18 @@ logger = get_logger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-MAX_ITERATIONS = 8
+MAX_ITERATIONS = 15
 MIN_INFRA_TOOLS = 3
+
+# How many iterations before the end to start forcing generate_report
+# (if MIN_INFRA_TOOLS have already been called).  Value of 2 means:
+#   last iteration  → force generate_report
+#   second-to-last  → force generate_report (leaves one retry slot)
+_FORCE_REPORT_FROM_END = 2
+
+# Max number of times generate_report can be rejected as "too early"
+# before we give up (prevents burning all iterations on early calls).
+_MAX_TOO_EARLY = 3
 
 # ---------------------------------------------------------------------------
 # generate_report tool spec (finalization-only — never in TOOL_REGISTRY)
@@ -224,27 +234,46 @@ def _investigate(run_id: UUID, db, time_window: str = "2h") -> None:
     infra_tools_called: list[str] = []   # names of infra tools used (for MIN_INFRA_TOOLS gate)
     sequence_num: int = 0                 # monotonic counter for tool_calls table
     report_retry_count: int = 0           # generate_report retries allowed: max 1
+    too_early_count: int = 0              # generate_report rejected as too_early; capped at _MAX_TOO_EARLY
     investigation_complete: bool = False
 
     all_tools_spec = build_openai_tools_spec() + [_GENERATE_REPORT_SPEC]
 
     for iteration in range(MAX_ITERATIONS):
+        # On the last _FORCE_REPORT_FROM_END iterations, if the agent has gathered
+        # enough evidence, force generate_report so we don't exhaust the limit
+        # calling more infra tools instead of finalising the report.
+        iterations_remaining = MAX_ITERATIONS - iteration  # ≥1 on first pass
+        force_report = (
+            iterations_remaining <= _FORCE_REPORT_FROM_END
+            and len(set(infra_tools_called)) >= MIN_INFRA_TOOLS
+            and not investigation_complete
+        )
+        tool_choice: str | dict = (
+            {"type": "function", "function": {"name": "generate_report"}}
+            if force_report
+            else "auto"
+        )
+
         logger.info(
             "agent_iteration_start",
             run_id=str(run_id),
             iteration=iteration + 1,
             max_iterations=MAX_ITERATIONS,
             infra_tools_called=infra_tools_called,
+            force_report=force_report,
         )
         print(f"\n[InfraPilot] ── Iteration {iteration + 1}/{MAX_ITERATIONS} ──────────────────", flush=True)
         print(f"[InfraPilot]    tools so far: {infra_tools_called or ['(none)']}", flush=True)
+        if force_report:
+            print(f"[InfraPilot]    (final stretch — forcing generate_report)", flush=True)
         print(f"[InfraPilot]    calling OpenAI ({settings.agent_model})...", flush=True)
 
         response = client.chat.completions.create(
             model=settings.agent_model,
             messages=messages,
             tools=all_tools_spec,
-            tool_choice="auto",
+            tool_choice=tool_choice,
         )
 
         assistant_msg = response.choices[0].message
@@ -254,13 +283,25 @@ def _investigate(run_id: UUID, db, time_window: str = "2h") -> None:
         # Append assistant turn to history
         messages.append(_message_to_dict(assistant_msg))
 
-        # No tool calls — agent produced a text response (shouldn't happen with tools available)
+        # No tool calls — agent produced a plain text response.
+        # Must explicitly mark the run failed before breaking: the for…else only
+        # fires when the loop is *exhausted*, not when it exits via break, so
+        # without this call the run would stay in "running" forever.
         if not assistant_msg.tool_calls:
             logger.warning(
                 "agent_no_tool_calls",
                 run_id=str(run_id),
                 iteration=iteration + 1,
                 content=assistant_msg.content or "",
+            )
+            repo.update_run_failed(
+                db,
+                run_id,
+                error_message=(
+                    f"Agent produced a text response at iteration {iteration + 1} "
+                    f"without calling any tools. "
+                    f"Infra tools called: {infra_tools_called}"
+                ),
             )
             break
 
@@ -287,6 +328,7 @@ def _investigate(run_id: UUID, db, time_window: str = "2h") -> None:
                     raw_args=raw_args,
                     infra_tools_called=infra_tools_called,
                     report_retry_count=report_retry_count,
+                    too_early_count=too_early_count,
                     run_id=run_id,
                     db=db,
                 )
@@ -298,17 +340,22 @@ def _investigate(run_id: UUID, db, time_window: str = "2h") -> None:
 
                 if tool_result["status"] == "retry":
                     report_retry_count += 1
+                elif tool_result["status"] == "too_early":
+                    too_early_count += 1
 
                 if tool_result["status"] == "complete":
                     print(f"[InfraPilot] ✓ Investigation complete!", flush=True)
                     investigation_complete = True
                     break  # stop processing further tool calls in this batch
-                elif tool_result["status"] == "retry_exhausted":
-                    print(f"[InfraPilot]    ✗ generate_report validation failed — retries exhausted", flush=True)
+                elif tool_result["status"] in ("retry_exhausted", "too_early_exhausted"):
+                    print(
+                        f"[InfraPilot]    ✗ generate_report failed — {tool_result['status']}",
+                        flush=True,
+                    )
                     investigation_complete = True
                     break  # run already marked failed; stop processing
                 elif tool_result["status"] == "too_early":
-                    print(f"[InfraPilot]    ✗ generate_report rejected: not enough tools yet", flush=True)
+                    print(f"[InfraPilot]    ✗ generate_report rejected: not enough tools yet ({too_early_count}/{_MAX_TOO_EARLY})", flush=True)
                 elif tool_result["status"] == "retry":
                     print(f"[InfraPilot]    ✗ generate_report validation failed — retrying", flush=True)
 
@@ -370,6 +417,7 @@ def _handle_generate_report(
     raw_args: dict,
     infra_tools_called: list[str],
     report_retry_count: int,
+    too_early_count: int,
     run_id: UUID,
     db,
 ) -> dict:
@@ -377,7 +425,7 @@ def _handle_generate_report(
     Handle a generate_report tool call.
 
     Returns a dict with:
-      - status: "too_early" | "retry" | "retry_exhausted" | "complete"
+      - status: "too_early" | "too_early_exhausted" | "retry" | "retry_exhausted" | "complete"
       - content: string to send back as the tool result message
     """
     unique_tools = set(infra_tools_called)
@@ -385,6 +433,25 @@ def _handle_generate_report(
     # Gate: not enough infra tools yet
     if len(unique_tools) < MIN_INFRA_TOOLS:
         missing = MIN_INFRA_TOOLS - len(unique_tools)
+
+        # Hard cap: if the LLM has been rejected too many times for calling too
+        # early, fail the run rather than burning all remaining iterations.
+        if too_early_count >= _MAX_TOO_EARLY:
+            error_msg = (
+                f"generate_report rejected {too_early_count} times for insufficient tools. "
+                f"Only {len(unique_tools)} unique infra tool(s) called "
+                f"({', '.join(sorted(unique_tools)) or 'none'}); "
+                f"required {MIN_INFRA_TOOLS}."
+            )
+            logger.error(
+                "generate_report_too_early_exhausted",
+                run_id=str(run_id),
+                too_early_count=too_early_count,
+                tools_called=len(unique_tools),
+            )
+            repo.update_run_failed(db, run_id, error_message=error_msg)
+            return {"status": "too_early_exhausted", "content": error_msg}
+
         content = (
             f"Cannot generate the report yet. "
             f"You have called {len(unique_tools)} unique infra tool(s) "
@@ -395,6 +462,7 @@ def _handle_generate_report(
             "generate_report_too_early",
             run_id=str(run_id),
             tools_called=len(unique_tools),
+            too_early_count=too_early_count,
         )
         return {"status": "too_early", "content": content}
 
