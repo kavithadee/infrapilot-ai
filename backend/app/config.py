@@ -1,13 +1,8 @@
 import json
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_DEFAULT_CORS_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:8080",
-]
+_DEFAULT_CORS = "http://localhost:3000,http://localhost:5173,http://localhost:8080"
 
 
 class Settings(BaseSettings):
@@ -26,35 +21,14 @@ class Settings(BaseSettings):
     environment: str = "development"
     app_version: str = "0.1.0"
 
-    # CORS — accepts a JSON array or a comma-separated string.
-    # In production set this to your frontend URL, e.g.:
+    # CORS — stored as a plain string so pydantic-settings never tries to
+    # JSON-parse it (which crashes on comma-separated values or empty strings).
+    # Accepts comma-separated URLs or a JSON array; parsed via cors_origins_list.
+    # Examples:
     #   CORS_ORIGINS=https://infrapilot-ai.vercel.app
-    #   CORS_ORIGINS=["https://infrapilot-ai.vercel.app","http://localhost:8080"]
-    # If unset or empty the localhost defaults are used.
-    cors_origins: list[str] = _DEFAULT_CORS_ORIGINS
-
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v: object) -> list[str]:
-        if not v:
-            return _DEFAULT_CORS_ORIGINS
-        if isinstance(v, list):
-            return v
-        if isinstance(v, str):
-            v = v.strip()
-            if not v:
-                return _DEFAULT_CORS_ORIGINS
-            # Try JSON array first: ["https://..."]
-            if v.startswith("["):
-                try:
-                    parsed = json.loads(v)
-                    if isinstance(parsed, list):
-                        return [str(o).strip() for o in parsed if o]
-                except json.JSONDecodeError:
-                    pass
-            # Fall back to comma-separated: https://foo.com,https://bar.com
-            return [o.strip() for o in v.split(",") if o.strip()]
-        return _DEFAULT_CORS_ORIGINS
+    #   CORS_ORIGINS=https://foo.vercel.app,http://localhost:8080
+    #   CORS_ORIGINS=["https://foo.vercel.app"]
+    cors_origins: str = _DEFAULT_CORS
 
     # Log backend — "postgres" (MVP) | "loki" (v1.5 optional extension)
     log_backend: str = "postgres"
@@ -68,6 +42,20 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.environment == "development"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse cors_origins into a list. Handles JSON array, comma-separated, or single URL."""
+        v = self.cors_origins.strip()
+        if not v:
+            return _DEFAULT_CORS.split(",")
+        if v.startswith("["):
+            try:
+                parsed = json.loads(v)
+                return [str(o).strip() for o in parsed if o]
+            except json.JSONDecodeError:
+                pass
+        return [o.strip() for o in v.split(",") if o.strip()]
 
 
 # Single shared instance — import this everywhere
