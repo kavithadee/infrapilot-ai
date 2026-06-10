@@ -6,6 +6,7 @@ import { StatusPill } from "@/components/infrapilot/StatusPill";
 import { ToolCallTimeline } from "@/components/infrapilot/ToolCallTimeline";
 import { EvidenceList } from "@/components/infrapilot/EvidenceList";
 import { ActionsList } from "@/components/infrapilot/ActionsList";
+import { RemediationDraftCard } from "@/components/infrapilot/RemediationDraftCard";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -244,7 +245,57 @@ function RunPage() {
                   title="Recommended actions"
                   count={report?.recommended_actions?.length ?? 0}
                 />
-                <ActionsList actions={report?.recommended_actions ?? []} />
+                {/*
+                 * Completed runs: render actions inline so each one gets a
+                 * "Draft PR" button via RemediationDraftCard.
+                 * In-progress / failed runs: use the plain ActionsList.
+                 */}
+                {run.status === "completed" && (report?.recommended_actions?.length ?? 0) > 0 ? (
+                  <ol className="space-y-3">
+                    {(report!.recommended_actions ?? []).map((a, i) => {
+                      const priorityStyles: Record<string, string> = {
+                        immediate: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",
+                        short_term: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                        long_term: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                      };
+                      const priorityLabels: Record<string, string> = {
+                        immediate: "Immediate",
+                        short_term: "Short term",
+                        long_term: "Long term",
+                      };
+                      const priorityCls = priorityStyles[a.priority];
+                      const priorityLabel = priorityLabels[a.priority] ?? a.priority;
+                      return (
+                        <li key={i} className="rounded-md border border-border/60 bg-card p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-foreground text-background">
+                                <span className="font-mono text-xs font-semibold">{i + 1}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="text-sm font-medium">{a.action}</h4>
+                                {a.rationale && (
+                                  <p className="mt-1 text-sm text-muted-foreground">{a.rationale}</p>
+                                )}
+                              </div>
+                            </div>
+                            {a.priority && priorityCls && (
+                              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider ${priorityCls}`}>
+                                {priorityLabel}
+                              </span>
+                            )}
+                          </div>
+                          {/* Draft PR button — only shown on completed runs */}
+                          <div className="mt-1 pl-9">
+                            <RemediationDraftCard runId={runId} recommendation={a.action} />
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                ) : (
+                  <ActionsList actions={report?.recommended_actions ?? []} />
+                )}
               </section>
 
               <section>
