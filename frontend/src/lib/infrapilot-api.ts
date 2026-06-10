@@ -132,14 +132,37 @@ export interface DemoScenario {
   emoji: string;
   description: string;
   incident: IncidentInput;
+  featured?: boolean;
+  badges: string[];
+  ctaLabel: string;
 }
 
 export const DEMO_SCENARIOS: DemoScenario[] = [
   {
+    id: "silent-bq-data-loss",
+    label: "Silent BigQuery data loss",
+    emoji: "🔕",
+    featured: true,
+    badges: ["Recommended", "Full agent loop", "GitHub draft PR", "Human review"],
+    ctaLabel: "Run full remediation demo",
+    description:
+      "audit-service stops writing audit events after schema drift: the service emits a new user_agent field, but the BigQuery table schema was not updated.",
+    incident: {
+      title: "Silent BigQuery data loss",
+      service_name: "audit-service",
+      severity: "critical",
+      description:
+        "audit-service wrote zero audit events to BigQuery for 30 minutes — deploy v9 added a new user_agent column in code but the production table was never migrated.",
+    },
+  },
+  {
     id: "bq-auth-failure",
     label: "BigQuery auth failure",
     emoji: "🔐",
-    description: "lat-cron-job stopped writing to BigQuery after deploy v42",
+    badges: ["Diagnosis only"],
+    ctaLabel: "Run investigation",
+    description:
+      "lat-cron-job stops writing to BigQuery after a deploy changes service-account key handling.",
     incident: {
       title: "BigQuery auth failure",
       service_name: "lat-cron-job",
@@ -152,26 +175,16 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     id: "latency-red-herring",
     label: "Latency spike with red herring deploy",
     emoji: "🕵️",
-    description: "api-service p99 latency spiked to 8s, but the deploy is innocent",
+    badges: ["Diagnosis only"],
+    ctaLabel: "Run investigation",
+    description:
+      "api-service p99 latency spikes after a deploy, but the real root cause is DB connection pool exhaustion.",
     incident: {
       title: "Latency spike with red herring deploy",
       service_name: "api-service",
       severity: "high",
       description:
         "api-service p99 latency spiked to 8s — a deploy went out 2 hours ago, but it is innocent; the real cause is DB connection pool exhaustion.",
-    },
-  },
-  {
-    id: "silent-bq-data-loss",
-    label: "Silent BigQuery data loss",
-    emoji: "🔕",
-    description: "audit-service wrote zero audit events after schema drift",
-    incident: {
-      title: "Silent BigQuery data loss",
-      service_name: "audit-service",
-      severity: "critical",
-      description:
-        "audit-service wrote zero audit events to BigQuery for 30 minutes — deploy v9 added a new column in code but the production table was never migrated.",
     },
   },
 ];

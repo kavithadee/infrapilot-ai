@@ -3,6 +3,33 @@
 // Mirrors the backend RemediationDraftDetail Pydantic schema exactly.
 // All requests go through the same BASE_URL / request() helper as infrapilot-api.ts.
 
+// ---------------------------------------------------------------------------
+// Client-side eligibility check — mirrors RemediationClassifier keyword rules
+// so the "Draft PR" button is only shown when the backend would accept it.
+// ---------------------------------------------------------------------------
+
+const BLOCKED_KEYWORDS = [
+  "rollback", "secret", "kubectl", "migration",
+  "alter table", "drop table", "production mutation",
+  "bq update", "bq mk",
+];
+
+const SCHEMA_VALIDATION_KEYWORDS = [
+  "schema", "validation", "validate", "compatibility",
+  "pre-deploy", "predeploy", "pre_deploy",
+];
+
+/**
+ * Returns true when the recommendation text would pass the backend
+ * RemediationClassifier (not blocked, contains a schema-validation keyword).
+ * Keeps the UI in sync with the backend so blocked actions never show the button.
+ */
+export function isRemediationEligible(recommendation: string): boolean {
+  const text = recommendation.toLowerCase();
+  if (BLOCKED_KEYWORDS.some((kw) => text.includes(kw))) return false;
+  return SCHEMA_VALIDATION_KEYWORDS.some((kw) => text.includes(kw));
+}
+
 const BASE_URL: string =
   import.meta.env.VITE_INFRAPILOT_API_URL ?? "http://localhost:8000";
 

@@ -17,6 +17,7 @@ import {
   type Run,
   type ToolCall,
 } from "@/lib/infrapilot-api";
+import { isRemediationEligible } from "@/lib/remediation-api";
 import {
   ArrowLeft,
   RefreshCw,
@@ -285,10 +286,12 @@ function RunPage() {
                               </span>
                             )}
                           </div>
-                          {/* Draft PR button — only shown on completed runs */}
-                          <div className="mt-1 pl-9">
-                            <RemediationDraftCard runId={runId} recommendation={a.action} />
-                          </div>
+                          {/* Draft PR button — only shown for eligible recommendations */}
+                          {isRemediationEligible(a.action) && (
+                            <div className="mt-1 pl-9">
+                              <RemediationDraftCard runId={runId} recommendation={a.action} />
+                            </div>
+                          )}
                         </li>
                       );
                     })}

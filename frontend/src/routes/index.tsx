@@ -1,6 +1,11 @@
+import { useState, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/infrapilot/AppShell";
-import { IncidentForm } from "@/components/infrapilot/IncidentForm";
+import { Hero } from "@/components/infrapilot/Hero";
+import { DemoScenarios } from "@/components/infrapilot/DemoScenarios";
+import { Workflow } from "@/components/infrapilot/Workflow";
+import { IncidentForm, emptyIncident } from "@/components/infrapilot/IncidentForm";
+import type { IncidentInput } from "@/lib/infrapilot-api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -9,12 +14,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Submit an incident and let InfraPilot AI investigate autonomously with full tool-call visibility, evidence, and recommended remediation.",
+          "Agentic on-call debugging copilot that investigates production-style incidents and turns safe recommendations into GitHub draft PRs for human review.",
       },
       { property: "og:title", content: "InfraPilot AI — Agentic On-Call Copilot" },
       {
         property: "og:description",
-        content: "Agentic debugging copilot for SRE and on-call teams.",
+        content:
+          "From alert to draft PR: evidence-backed root-cause investigation for SRE and on-call teams.",
       },
     ],
   }),
@@ -22,22 +28,36 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
+  const [form, setForm] = useState<IncidentInput>(emptyIncident);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  const handleScenario = (incident: IncidentInput) => {
+    setForm(incident);
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
   return (
     <AppShell>
-      <div className="mb-8">
-        <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-          New investigation
-        </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-          What's broken?
-        </h1>
-        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Describe the incident and InfraPilot will inspect deploy history, service logs,
-          Kubernetes-style health, config changes, and data-pipeline errors to generate an
-          evidence-backed investigation.
-        </p>
-      </div>
-      <IncidentForm />
+      <Hero />
+      <DemoScenarios onSelect={handleScenario} />
+      <Workflow />
+      <section ref={formRef} id="custom-incident" className="pt-10">
+        <div className="mb-5 max-w-3xl">
+          <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+            Custom incident
+          </p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+            Or submit a custom incident
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Custom incidents use the same investigation flow, but seeded scenarios have the
+            richest mock data and are recommended for evaluating the end-to-end agent demo.
+          </p>
+        </div>
+        <IncidentForm form={form} setForm={setForm} />
+      </section>
     </AppShell>
   );
 }
