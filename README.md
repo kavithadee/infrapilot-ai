@@ -4,7 +4,15 @@ An agentic on-call copilot that investigates infrastructure incidents and closes
 
 Submit an incident description → InfraPilot runs an OpenAI tool-calling loop across five simulated infra tools → returns a structured root-cause report with evidence, timeline, and recommendations. For eligible incidents it generates a validated, runnable pre-deploy fix and opens a draft PR on GitHub for human review.
 
-> **Live demo:** [`infrapilot-ai-phi.vercel.app`](https://infrapilot-ai-phi.vercel.app) (frontend only; backend deployed on Railway)
+**Live demo:** https://infrapilot-ai-phi.vercel.app
+
+Frontend is hosted on Vercel; the FastAPI backend is deployed on Railway.
+
+---
+
+## Why this project matters
+
+InfraPilot is designed to demonstrate the engineering concerns behind production agentic systems: tool orchestration, bounded context, structured outputs, deterministic guardrails, eval scenarios, caching, persistence, and human-in-the-loop remediation. The demo intentionally uses seeded infrastructure data so the full workflow can be evaluated without connecting real production systems.
 
 ---
 
@@ -178,9 +186,15 @@ Each tool extends `BaseTool`. The base `run()` handles Redis caching, timing, an
 // Output
 [
   {
-    "timestamp": "2024-01-15T10:35:00Z",
-    "level": "ERROR",
-    "message": "BigQuery insert failed: SCHEMA_ERROR user_agent field not found",
+    "timestamp": "2024-01-15T10:32:00Z",
+    "level": "INFO",
+    "message": "Audit event received, dispatching to BigQuery writer",
+    "service": "audit-service"
+  },
+  {
+    "timestamp": "2024-01-15T10:33:00Z",
+    "level": "INFO",
+    "message": "BigQuery writer completed batch",
     "service": "audit-service"
   }
 ]
@@ -296,7 +310,7 @@ Poll for investigation status and the final report.
     "recommended_actions": [
       {
         "action": "Add a pre-deploy schema compatibility validation check",
-        "priority": "immediate",
+        "priority": "short_term",
         "rationale": "Prevents schema drift from silently dropping writes"
       }
     ],
@@ -420,7 +434,7 @@ All read paths are prefix-guarded: must start with `demo-infra/` or `.github/`.
 |---|---|---|
 | API | FastAPI + Uvicorn | Sync SQLAlchemy; no Alembic (`create_all` on startup) |
 | Agent | OpenAI gpt-4o tool-calling | Structured output via JSON mode + Pydantic |
-| Database | PostgreSQL + SQLAlchemy | 8 tables: incidents, runs, tool_calls, 5 simulated data tables, remediation_drafts |
+| Database | PostgreSQL + SQLAlchemy | 9 tables: incidents, runs, tool_calls, 5 simulated data tables, remediation_drafts |
 | Cache | Redis | 60 s TTL per tool call; graceful degradation on connection failure |
 | GitHub | github-mcp-server v1.2.0 | Python MCP SDK; binary pinned in Dockerfile |
 | Frontend | React 19 + Vite + TanStack Router | Tailwind + shadcn/ui; polling every 2 s |
