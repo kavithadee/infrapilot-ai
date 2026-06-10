@@ -77,9 +77,14 @@ async def resolve_repo_context(
     schemas_listing = await list_directory(
         session, owner=owner, repo=repo, path=f"{root}/schemas"
     )
+    schema_prefix = f"{root}/"
     read_paths = [
         p for p in schemas_listing
         if any(p.endswith(ext) for ext in _SCHEMA_EXTENSIONS)
+        # Guard: only accept paths that carry the full repo-relative service_root
+        # prefix.  Some MCP server versions return bare filenames rather than
+        # full paths; those would fail _enforce_read_path in read_file() later.
+        and p.startswith(schema_prefix)
     ]
     logger.info("repo_context_resolver_schemas", paths=read_paths)
 

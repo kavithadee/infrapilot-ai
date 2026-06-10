@@ -1,6 +1,6 @@
 import json
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_CORS = "http://localhost:3000,http://localhost:5173,http://localhost:8080"
@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     )
     github_target_repo: str = "kavithadee/infrapilot-ai"  # GITHUB_TARGET_REPO
     github_base_branch: str = "main"     # GITHUB_BASE_BRANCH
+
+    @field_validator("github_target_repo")
+    @classmethod
+    def github_target_repo_must_have_owner(cls, v: str) -> str:
+        """Fail fast at startup rather than mid-pipeline with an opaque ValueError."""
+        if "/" not in v:
+            raise ValueError(
+                f"GITHUB_TARGET_REPO must be in 'owner/repo' format, got: '{v}'"
+            )
+        return v
 
     model_config = SettingsConfigDict(
         env_file=".env",
