@@ -127,3 +127,24 @@ class SimulatedConfigDiff(Base):
     deploy_id    = Column(Text)   # version string e.g. "v42"
     diff_json    = Column(JSON)   # { added: [...], removed: [...], changed: [...] }
     recorded_at  = Column(DateTime(timezone=True), nullable=False)
+
+
+# ---------------------------------------------------------------------------
+# Remediation tables (v1.6)
+# ---------------------------------------------------------------------------
+
+class RemediationDraft(Base):
+    __tablename__ = "remediation_drafts"
+
+    id                      = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    run_id                  = Column(UUID(as_uuid=True), ForeignKey("investigation_runs.id"), nullable=False, index=True)
+    status                  = Column(Text, nullable=False, default="drafting")  # "drafting" | "pr_created" | "failed"
+    selected_recommendation = Column(Text, nullable=False)
+    fix_spec_json           = Column(JSON, nullable=True)
+    target_repo             = Column(Text, nullable=False, default="kavithadee/infrapilot-ai")
+    base_branch             = Column(Text, nullable=False, default="main")
+    branch_name             = Column(Text, nullable=True)
+    github_pr_url           = Column(Text, nullable=True)
+    error_message           = Column(Text, nullable=True)
+    created_at              = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at              = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

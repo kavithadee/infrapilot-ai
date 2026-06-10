@@ -3,7 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import Incident, InvestigationRun, ToolCall
+from app.db.models import Incident, InvestigationRun, RemediationDraft, ToolCall
 
 
 # ---------------------------------------------------------------------------
@@ -191,5 +191,60 @@ def get_tool_calls_for_run(db: Session, run_id: UUID) -> list[ToolCall]:
         db.query(ToolCall)
         .filter(ToolCall.run_id == run_id)
         .order_by(ToolCall.sequence_num.asc())
+        .all()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Remediation Drafts (v1.6)
+# ---------------------------------------------------------------------------
+
+
+def create_remediation_draft(
+    db: Session,
+    *,
+    run_id: UUID,
+    selected_recommendation: str,
+    target_repo: str,
+    base_branch: str,
+) -> RemediationDraft:
+    draft = RemediationDraft(
+        run_id=run_id,
+        status="drafting",
+        selected_recommendation=selected_recommendation,
+        target_repo=target_repo,
+        base_branch=base_branch,
+    )
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+def update_remediation_draft(
+    db: Session,
+    *,
+    draft_id: UUID,
+    **kwargs,
+) -> RemediationDraft:
+    """
+    Partial update — pass only the fields to change as keyword arguments.
+    Accepted keys: status, branch_name, fix_spec_json, github_pr_url, error_message.
+    """
+    db.query(RemediationDraft).filter(RemediationDraft.id == draft_id).update(kwargs)
+    db.commit()
+    draft = db.query(RemediationDraft).filter(RemediationDraft.id == draft_id).first()
+    return draft
+
+
+def get_remediation_draft(db: Session, draft_id: UUID) -> RemediationDraft | None:
+    return db.query(RemediationDraft).filter(RemediationDraft.id == draft_id).first()
+
+
+def list_remediation_drafts_for_run(db: Session, run_id: UUID) -> list[RemediationDraft]:
+    return (
+        db.query(RemediationDraft)
+        .filter(RemediationDraft.run_id == run_id)
+        .order_by(RemediationDraft.created_at.desc())
         .all()
     )

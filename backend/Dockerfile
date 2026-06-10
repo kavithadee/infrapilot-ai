@@ -7,11 +7,21 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Install system dependencies needed by psycopg2
+# Install system dependencies needed by psycopg2 and binary downloads
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
+    curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Install github-mcp-server binary (v1.2.0, verified asset: github-mcp-server_Linux_x86_64.tar.gz)
+# Bump GITHUB_MCP_VERSION to upgrade; --version verifies the binary runs and fails the build fast if not.
+ARG GITHUB_MCP_VERSION=v1.2.0
+RUN curl -fsSL \
+      "https://github.com/github/github-mcp-server/releases/download/${GITHUB_MCP_VERSION}/github-mcp-server_Linux_x86_64.tar.gz" \
+    | tar xz -C /usr/local/bin github-mcp-server \
+    && github-mcp-server --version
 
 # Install Python dependencies
 COPY requirements.txt .
