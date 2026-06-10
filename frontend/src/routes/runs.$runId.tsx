@@ -9,7 +9,6 @@ import { ActionsList } from "@/components/infrapilot/ActionsList";
 import { RemediationDraftCard } from "@/components/infrapilot/RemediationDraftCard";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
 import {
   getRun,
   getToolCalls,
@@ -18,14 +17,14 @@ import {
   type ToolCall,
 } from "@/lib/infrapilot-api";
 import { isRemediationEligible } from "@/lib/remediation-api";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import {
   ArrowLeft,
-  RefreshCw,
   AlertCircle,
   Activity,
   Database,
   Wrench,
-  Info,
+  ChevronDown,
 } from "lucide-react";
 
 export const Route = createFileRoute("/runs/$runId")({
@@ -124,10 +123,6 @@ function RunPage() {
           <ArrowLeft className="h-4 w-4" />
           New incident
         </Link>
-        <Button variant="outline" size="sm" onClick={loadAll} className="gap-1.5">
-          <RefreshCw className="h-3.5 w-3.5" />
-          Refresh
-        </Button>
       </div>
 
       {loading && !run && (
@@ -208,49 +203,12 @@ function RunPage() {
                 </Card>
               )}
 
-              {report && (
-                <section>
-                  <SectionHeader title="Evidence" count={report.evidence?.length ?? 0} />
-                  <EvidenceList items={report.evidence ?? []} />
-                </section>
-              )}
-
-              {report && report.timeline && report.timeline.length > 0 && (
-                <section>
-                  <SectionHeader title="Timeline" count={report.timeline.length} />
-                  <ol className="relative space-y-3 border-l border-border/60 pl-6">
-                    {report.timeline.map((t, i) => (
-                      <li key={i} className="relative">
-                        <span className="absolute -left-[25px] top-2 h-2 w-2 rounded-full bg-foreground/40" />
-                        <div className="rounded-md border border-border/60 bg-card p-3">
-                          {t.timestamp && (
-                            <div className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                              {t.timestamp}
-                            </div>
-                          )}
-                          {t.event && <div className="text-sm font-medium">{t.event}</div>}
-                          {t.source && (
-                            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                              via {t.source}
-                            </p>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-              )}
-
+              {/* Recommended actions — directly below summary so Draft PR is visible early */}
               <section>
                 <SectionHeader
                   title="Recommended actions"
                   count={report?.recommended_actions?.length ?? 0}
                 />
-                {/*
-                 * Completed runs: render actions inline so each one gets a
-                 * "Draft PR" button via RemediationDraftCard.
-                 * In-progress / failed runs: use the plain ActionsList.
-                 */}
                 {run.status === "completed" && (report?.recommended_actions?.length ?? 0) > 0 ? (
                   <ol className="space-y-3">
                     {(report!.recommended_actions ?? []).map((a, i) => {
@@ -270,7 +228,7 @@ function RunPage() {
                         <li key={i} className="rounded-md border border-border/60 bg-card p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex min-w-0 items-start gap-3">
-                              <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-foreground text-background">
+                              <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
                                 <span className="font-mono text-xs font-semibold">{i + 1}</span>
                               </div>
                               <div className="min-w-0">
@@ -286,7 +244,6 @@ function RunPage() {
                               </span>
                             )}
                           </div>
-                          {/* Draft PR button — only shown for eligible recommendations */}
                           {isRemediationEligible(a.action) && (
                             <div className="mt-1 pl-9">
                               <RemediationDraftCard runId={runId} recommendation={a.action} />
@@ -300,6 +257,57 @@ function RunPage() {
                   <ActionsList actions={report?.recommended_actions ?? []} />
                 )}
               </section>
+
+              {/* Evidence — collapsible */}
+              {report && (
+                <Collapsible defaultOpen={false}>
+                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-md border border-border/60 bg-card px-4 py-3 text-left hover:bg-muted/40 transition-colors">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm font-semibold tracking-tight">Evidence</span>
+                      <span className="font-mono text-xs text-muted-foreground">{report.evidence?.length ?? 0}</span>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-2">
+                    <EvidenceList items={report.evidence ?? []} />
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {/* Timeline — collapsible */}
+              {report && report.timeline && report.timeline.length > 0 && (
+                <Collapsible defaultOpen={false}>
+                  <CollapsibleTrigger className="group flex w-full items-center justify-between rounded-md border border-border/60 bg-card px-4 py-3 text-left hover:bg-muted/40 transition-colors">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm font-semibold tracking-tight">Incident timeline</span>
+                      <span className="font-mono text-xs text-muted-foreground">{report.timeline.length}</span>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-2">
+                    <ol className="relative space-y-3 border-l border-border/60 pl-6">
+                      {report.timeline.map((t, i) => (
+                        <li key={i} className="relative">
+                          <span className="absolute -left-[25px] top-2 h-2 w-2 rounded-full bg-foreground/40" />
+                          <div className="rounded-md border border-border/60 bg-card p-3">
+                            {t.timestamp && (
+                              <div className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                                {t.timestamp}
+                              </div>
+                            )}
+                            {t.event && <div className="text-sm font-medium">{t.event}</div>}
+                            {t.source && (
+                              <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                                via {t.source}
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
 
               <section>
                 <SectionHeader title="Tool-call timeline" count={calls.length} />

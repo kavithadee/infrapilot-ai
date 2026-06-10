@@ -121,9 +121,9 @@ export function RemediationDraftCard({ runId, recommendation }: RemediationDraft
     return (
       <div className="mt-3 flex items-center gap-3">
         <Button
-          variant="outline"
+          variant="default"
           size="sm"
-          className="gap-1.5 text-xs"
+          className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm"
           onClick={handleDraftPR}
           disabled={submitting}
         >
