@@ -4,7 +4,7 @@ An agentic on-call copilot that investigates infrastructure incidents and closes
 
 Submit an incident description → InfraPilot runs an OpenAI tool-calling loop across five simulated infra tools → returns a structured root-cause report with evidence, timeline, and recommendations. For eligible incidents it generates a validated, runnable pre-deploy fix and opens a draft PR on GitHub for human review.
 
-> **Live demo:** [`infrapilot-ai.vercel.app`](https://infrapilot-ai.vercel.app) (frontend only; backend deployed on Railway)
+> **Live demo:** [`infrapilot-ai-phi.vercel.app`](https://infrapilot-ai-phi.vercel.app) (frontend only; backend deployed on Railway)
 
 ---
 
