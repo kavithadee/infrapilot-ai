@@ -16,6 +16,9 @@ from app.api import health, tools
 # Routers — Day 2
 from app.api import incidents, runs
 
+# Routers — v1.6 remediation
+from app.api import remediation
+
 logger = get_logger(__name__)
 
 
@@ -65,3 +68,4 @@ app.include_router(tools.router, tags=["dev"])
 
 app.include_router(incidents.router, prefix="/incidents", tags=["incidents"])
 app.include_router(runs.router, prefix="/runs", tags=["runs"])
+app.include_router(remediation.router, tags=["remediation"])

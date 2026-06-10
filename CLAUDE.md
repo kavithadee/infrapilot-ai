@@ -258,68 +258,148 @@ Defined in `app/config.py` via pydantic-settings. Loaded from `.env` (copy from 
 
 ---
 
-## v1.5 — Optional Grafana/Loki/MCP Observability Extension
 
-> **Do not start v1.5 until all MVP acceptance criteria above are met.**
->
-> Core MVP must work with only FastAPI + Postgres + Redis. Nothing in v1.5 is required
-> for the app to function. All Loki/Grafana services are opt-in via Docker Compose profiles.
+## v1.6 — GitHub MCP Human-in-the-Loop Remediation
 
 ### Goal
 
-Simulate a real on-call workflow by pushing the same seeded logs into Loki and showing
-how Claude Code can query them via the Grafana MCP server — demonstrating that
-InfraPilot's `get_service_logs` tool could be replaced or augmented with real log
-infrastructure in production.
+Close the loop from diagnosis to a real draft PR on GitHub:
+```
+click "Draft PR" → backend validates → GitHub MCP reads schemas → OpenAI generates fix
+→ GitHub MCP creates branch + files + draft PR → frontend opens PR → human reviews/merges
+```
+Scoped to: `audit-service` BigQuery schema mismatch (Scenario 3) only.
 
-### Architecture Addition
+### Architecture (v5.1 — Policy-Driven, Simplified)
+
 ```
-docker compose --profile observability up
-  → adds: Loki (port 3100) + Grafana (port 3000)
-  → seed_loki.py pushes simulated_logs rows → Loki via HTTP push API
-  → Grafana auto-provisioned with Loki datasource
-  → Claude Code configured with Grafana MCP → queries Loki via LogQL
+POST /runs/{run_id}/remediation-drafts
+  │
+  ├─ 1. RemediationClassifier (deterministic, no LLM)
+  │      keyword rules on selected_recommendation:
+  │        schema/validation/compatibility/pre-deploy → "schema_validation"
+  │        rollback/secret/kubectl/migration/ALTER TABLE → blocked (422)
+  │        anything else → unsupported (422)
+  │      v1 gate: only audit-service + schema_validation proceeds
+  │
+  ├─ 2. RepoContextResolver (GitHub MCP)
+  │      lookup SERVICE_REPO_MAP[service_name] → { repo, service_root }
+  │      MCP inspect (constrained — no arbitrary recursion):
+  │        {service_root}/, schemas/, scripts/, tests/, .github/workflows/
+  │      output: RepoContext { read_paths, candidate_write_dirs,
+  │                            existing_ci_workflows, service_context_summary }
+  │
+  ├─ 3. FixSpecAgent (single OpenAI structured-output call)
+  │      MCP reads plan.files_to_read (prefix guard: service_root or .github/)
+  │      LLM returns FixSpec: branch_name, pr_title, pr_body, files[],
+  │                           change_summary, test_plan, risk_notes
+  │      Policy gate: every files[].path checked against RemediationPolicy
+  │                   every files[].content checked for unsafe keywords
+  │
+  ├─ 4. MCP Execution (Python-controlled, not LLM-controlled)
+  │      create_branch
+  │      create_or_update_file × N (policy check before each write)
+  │      create_pull_request (draft=True)
+  │
+  └─ 5. Persist + return 201 { github_pr_url }
+
+GET /remediation-drafts/{draft_id}     → stored draft
+GET /runs/{run_id}/remediation-drafts  → list drafts for run
 ```
+
+### Safety Constraints
+
+- **Pattern-based write paths** scoped to resolved `service_root`:
+  - `{service_root}/scripts/*.py`, `{service_root}/tests/*.py`
+  - `.github/workflows/*validation*.yml` / `.yaml`
+- **Blocked paths:** `.env*`, `**/secrets/**`, `**/credentials/**`, `**/k8s/**`, `**/terraform/**`, `**/migrations/**`, `**/alembic/**`
+- **Content safety keywords:** `bq update`, `bq mk`, `kubectl apply/delete`, `alter table`, `drop table`, `secret create/patch`, `gcloud secrets`
+- **Explicit runtime path guards** (not asserts) before every MCP write call
+- **Human gate:** backend creates draft PR only — never merges, never deploys, never writes to main
+
+### New Files
+
+| Path | Purpose |
+|---|---|
+| `backend/app/guardrails/service_registry.py` | `SERVICE_REPO_MAP` dict; `get_service_config(service_name)` |
+| `backend/app/guardrails/remediation_policy.py` | `RemediationPolicy(service_root)` — safety rules only; `check_write_path()`, `check_file_content()` |
+| `backend/app/guardrails/remediation_classifier.py` | Deterministic `classify_remediation_type(recommendation) → str`; `UnsupportedRemediationType` |
+| `backend/app/services/repo_context_resolver.py` | `resolve_repo_context(mcp, service_name, owner, repo) → RepoContext`; constrained to 5 dirs |
+| `backend/app/api/remediation.py` | 3 endpoints: POST + 2× GET |
+| `backend/tests/unit/test_remediation.py` | Unit tests (mocked MCP + mocked OpenAI) |
+| `frontend/src/lib/remediation-api.ts` | API client + TypeScript types |
+| `frontend/src/components/infrapilot/RemediationDraftCard.tsx` | PR URL, branch, files, "Human review required" banner |
+
+### Modified Files
+
+| Path | Change |
+|---|---|
+| `backend/app/services/github_mcp.py` | Remove exact frozensets; add `list_directory()`; prefix-based read guard; policy-delegating write guard |
+| `backend/app/schemas/remediation.py` | Add `RepoContext`; update `FixSpec` (add `change_summary`); `FixFile` validator uses `RemediationPolicy` |
+| `backend/app/agents/fix_spec_agent.py` | Full rewrite: 4-stage pipeline (classify → resolve → LLM → MCP) |
+| `backend/app/db/models.py` | `RemediationDraft` ORM model — already updated ✓ |
+| `backend/app/db/repositories.py` | 4 remediation functions — already added ✓ |
+| `backend/app/config.py` | GitHub settings — already added ✓ |
+| `backend/app/main.py` | Register remediation router |
+| `backend/requirements.txt` | `mcp` — already added ✓ |
+| `backend/Dockerfile` | `github-mcp-server` binary — already added ✓ |
+| `frontend/src/routes/runs.$runId.tsx` | Add remediation section after ActionsList |
+| `README.md` | GitHub PAT setup, scopes, production GitHub App note |
+
+### Environment Variables (Railway + local `.env`)
+
+| Variable | Purpose |
+|---|---|
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | Fine-grained PAT: Contents + Pull requests (read/write) on target repo only |
+| `GITHUB_TARGET_REPO` | Default: `kavithadee/infrapilot-ai` |
+| `GITHUB_BASE_BRANCH` | Default: `main` |
 
 ### Todo
 
-#### Docker + Infrastructure
-- [ ] `docker-compose.yml` — add `loki` (grafana/loki:2.9.0) and `grafana` (grafana/grafana:10.2.0) services under `profiles: ["observability"]`
-- [ ] `docker/grafana/provisioning/datasources/loki.yaml` — auto-provision Loki as default datasource pointing to `http://loki:3100`
+#### Already done
+- [x] **Task 1** — Create `demo-infra/audit-service/` fixture files at repo root
+- [x] **Task 2** — Add `RemediationDraft` ORM model to `backend/app/db/models.py`
+- [x] **Task 3** — Revise `RemediationDraft` model: add `branch_name`, `error_message`; status `"drafting|pr_created|failed"`; delete `backend/app/data/demo_infra/`
+- [x] **Task 4** — Add `mcp` to `requirements.txt`; update `Dockerfile` to install `github-mcp-server` (pinned, verified)
+- [x] **Task 5** — Add `github_token`, `github_target_repo`, `github_base_branch` to `app/config.py`
+- [x] **Task 8** — Add 4 remediation repository functions to `repositories.py`
 
-#### Loki Seeder
-- [ ] `app/seed/seed_loki.py` — read all `simulated_logs` rows from Postgres, batch by `(service_name, severity)`, push to Loki HTTP push API (`POST http://loki:3100/loki/api/v1/push`); idempotent (Loki deduplicates by stream + timestamp)
+#### Needs revision (written with old hardcoded approach)
+- [x] **Task 6r** — Revise `backend/app/services/github_mcp.py`: remove exact frozensets; add `list_directory()`; prefix-based read guard; policy-delegating write guard
+- [x] **Task 7r** — Revise `backend/app/schemas/remediation.py`: add `RepoContext`; update `FixSpec` (add `change_summary`); `FixFile` validator uses `RemediationPolicy`; remove `ALLOWED_WRITE_PATHS` import
 
-#### README
-- [ ] "Optional MCP Observability Extension" section covering:
-  1. Start observability stack: `docker compose --profile observability up`
-  2. Seed logs into Loki: `docker compose --profile observability exec api python -m app.seed.seed_loki`
-  3. Configure Grafana MCP in `.claude/settings.json` (see snippet below)
-  4. Demo workflow: ask Claude Code to query Loki for lat-cron-job ERROR logs via LogQL
-  5. Comparison note: same logs accessible via InfraPilot's `get_service_logs` (Postgres) vs Grafana MCP (Loki)
-  6. Production path: `get_service_logs` could be replaced with a Grafana/Loki MCP-backed tool
+#### New files
+- [x] **Task 6n** — Create `backend/app/guardrails/service_registry.py` + `backend/app/guardrails/remediation_policy.py`
+- [x] **Task 7n** — Create `backend/app/guardrails/remediation_classifier.py`
+- [x] **Task 8n** — Create `backend/app/services/repo_context_resolver.py`
+- [x] **Task 9r** — Rewrite `backend/app/agents/fix_spec_agent.py` (4-stage pipeline)
 
-#### Grafana MCP Config (document in README)
-```json
-// .claude/settings.json — mcpServers block
-{
-  "mcpServers": {
-    "grafana": {
-      "command": "npx",
-      "args": ["-y", "@grafana/mcp-grafana"],
-      "env": {
-        "GRAFANA_URL": "http://localhost:3000",
-        "GRAFANA_API_KEY": ""
-      }
-    }
-  }
-}
-```
-> Anonymous auth is enabled in the Grafana container so no API key is needed locally.
+#### Continue
+- [x] **Task 10** — Create `backend/app/api/remediation.py` + register router in `main.py`
+- [x] **Task 11** — Write `backend/tests/unit/test_remediation.py` (unit tests, mocked pipeline stages)
 
-### v1.5 Acceptance Criteria
-- [ ] `docker compose --profile observability up` starts all 5 services cleanly
-- [ ] `curl http://localhost:3100/ready` → `ready`
-- [ ] `curl http://localhost:3000` → Grafana UI loads with Loki datasource pre-configured
-- [ ] `seed_loki.py` runs without errors; Grafana Explore query `{service="lat-cron-job"}` returns JWT error logs
-- [ ] Grafana MCP configured in `.claude/settings.json`; Claude Code can call `loki_query` MCP tool and return lat-cron-job ERROR logs matching what `get_service_logs` returns from Postgres
+#### Backend verification gate (blocks all frontend work)
+- [x] **Task 12** — All 4 checks must pass:
+  1. `docker compose up --build` succeeds; `github-mcp-server --version` in build log ✓
+  2. `pytest tests/unit/test_remediation.py` → 20/20 pass ✓
+  3. `curl POST /runs/{run_id}/remediation-drafts` with audit-service completed run → 201 ✓
+  4. Real draft PR at https://github.com/kavithadee/infrapilot-ai/pull/6, branch `infrapilot/audit-service-schema_validation-20260610`, 3 generated files ✓
+
+#### Frontend (start only after Task 12 passes)
+- [ ] **Task 13** — Create `frontend/src/lib/remediation-api.ts`
+- [ ] **Task 14** — Create `frontend/src/components/infrapilot/RemediationDraftCard.tsx`
+- [ ] **Task 15** — Integrate remediation section into `frontend/src/routes/runs.$runId.tsx`
+
+#### Finishing
+- [ ] **Task 16** — Verify `.gitignore` covers `GITHUB_PERSONAL_ACCESS_TOKEN`; run full test suite
+- [ ] **Task 17** — Update `README.md`
+- [ ] **Task 18** — Commit and deploy to Railway
+
+### v1.6 Acceptance Criteria
+- [ ] `POST /runs/{run_id}/remediation-drafts` → 201 with `github_pr_url` for completed audit-service run
+- [ ] Returns 400 for incomplete run, 422 for wrong service or unsafe recommendation, 503 if token not set
+- [ ] All unit tests pass (mocked MCP + mocked LLM)
+- [ ] Write paths scoped to resolved service_root; unsafe content keywords rejected
+- [ ] Frontend shows "Draft PR" button on eligible runs only; opens real PR in new tab
+- [ ] `RemediationDraftCard` shows PR URL, branch, files changed, "Human review required" banner
+- [ ] README documents GitHub PAT setup end-to-end

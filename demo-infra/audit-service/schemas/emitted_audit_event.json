@@ -1,0 +1,9 @@
+{
+  "fields": [
+    {"name": "event_id",   "type": "STRING"},
+    {"name": "user_id",    "type": "STRING"},
+    {"name": "action",     "type": "STRING"},
+    {"name": "timestamp",  "type": "TIMESTAMP"},
+    {"name": "user_agent", "type": "STRING"}
+  ]
+}

@@ -1,5 +1,6 @@
 import json
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_CORS = "http://localhost:3000,http://localhost:5173,http://localhost:8080"
@@ -30,8 +31,18 @@ class Settings(BaseSettings):
     #   CORS_ORIGINS=["https://foo.vercel.app"]
     cors_origins: str = _DEFAULT_CORS
 
-    # Log backend — "postgres" (MVP) | "loki" (v1.5 optional extension)
+    # Log backend — "postgres" (MVP)
     log_backend: str = "postgres"
+
+    # GitHub MCP integration (v1.6 remediation feature)
+    # Fine-grained PAT with Contents + Pull requests (read/write) on the target repo only.
+    # App starts without these set; the remediation endpoint returns 503 if github_token is empty.
+    github_token: str = Field(
+        default="",
+        validation_alias="GITHUB_PERSONAL_ACCESS_TOKEN",
+    )
+    github_target_repo: str = "kavithadee/infrapilot-ai"  # GITHUB_TARGET_REPO
+    github_base_branch: str = "main"     # GITHUB_BASE_BRANCH
 
     model_config = SettingsConfigDict(
         env_file=".env",
