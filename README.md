@@ -468,6 +468,8 @@ GITHUB_BASE_BRANCH=main
 
 > **Production path:** Replace the fine-grained PAT with a GitHub App installation token for per-installation audit logs, automatic token rotation, and org-level scoping.
 
+> **Idempotency:** The remediation pipeline is idempotent for the demo scenario. If a `pr_created` draft already exists for the `audit-service` schema-validation remediation, the backend returns the existing PR immediately — no OpenAI call, no new branch. The deterministic branch `infrapilot/demo-audit-schema-validation` is reused across runs; a GitHub-side fallback (`list_pull_requests`) handles the case where the database was wiped but the PR still exists.
+
 ---
 
 ## Running tests

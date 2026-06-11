@@ -42,6 +42,7 @@ from app.schemas.remediation import FixSpec
 from app.services.github_mcp import (
     create_branch,
     create_pull_request,
+    find_open_pr_for_branch,
     github_mcp_session,
     read_file,
     write_file,
@@ -49,6 +50,30 @@ from app.services.github_mcp import (
 from app.services.repo_context_resolver import RepoContext, resolve_repo_context
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Demo idempotency constants
+# ---------------------------------------------------------------------------
+
+# Deterministic branch name for the v1 demo remediation.
+# Using a fixed name means the same branch is reused across runs, and
+# create_pull_request's "already exists" handling returns the existing PR URL.
+_DEMO_BRANCH_NAME = "infrapilot/demo-audit-schema-validation"
+
+# Keywords that identify the demo schema_validation remediation.
+# Mirrors RemediationClassifier._SCHEMA_VALIDATION_KEYWORDS.
+_DEMO_SCHEMA_KEYWORDS: frozenset[str] = frozenset({
+    "schema", "validation", "validate", "compatibility",
+    "pre-deploy", "predeploy", "pre_deploy", "mismatch",
+})
+
+
+def _is_demo_remediation(service_name: str, recommendation: str) -> bool:
+    """True when this is the v1 audit-service schema_validation demo remediation."""
+    if service_name != "audit-service":
+        return False
+    rec = recommendation.lower()
+    return any(kw in rec for kw in _DEMO_SCHEMA_KEYWORDS)
 
 
 # ---------------------------------------------------------------------------
@@ -374,6 +399,31 @@ async def run_fix_spec_agent(
     """
     try:
         # ------------------------------------------------------------------
+        # Stage 0: Idempotency — return existing PR for demo remediation
+        # ------------------------------------------------------------------
+        # For the public demo, multiple recruiters (or repeated clicks) should
+        # all receive the same PR rather than spinning up OpenAI each time.
+        # Check Postgres first (fast), then GitHub as a fallback (handles the
+        # case where the DB was wiped but the branch/PR still exist on GitHub).
+        if _is_demo_remediation(incident.service_name, selected_recommendation):
+            existing = repo.find_demo_pr_created_draft(db)
+            if existing:
+                logger.info(
+                    "fix_spec_agent_reusing_existing_pr",
+                    pr_url=existing.github_pr_url,
+                    source_draft_id=str(existing.id),
+                )
+                repo.update_remediation_draft(
+                    db,
+                    draft_id=draft_id,
+                    status="pr_created",
+                    branch_name=existing.branch_name,
+                    fix_spec_json=existing.fix_spec_json,
+                    github_pr_url=existing.github_pr_url,
+                )
+                return existing.github_pr_url
+
+        # ------------------------------------------------------------------
         # Stage 1: Classify recommendation (deterministic, no LLM)
         # ------------------------------------------------------------------
         logger.info(
@@ -416,6 +466,27 @@ async def run_fix_spec_agent(
                 service_name=incident.service_name,
                 service_root=service_root,
             )
+
+            # GitHub-side idempotency fallback: handles the case where the
+            # Postgres DB was wiped but the demo branch/PR still exist.
+            if _is_demo_remediation(incident.service_name, selected_recommendation):
+                existing_pr_url = await find_open_pr_for_branch(
+                    mcp, owner=owner, repo=repo_name, branch=_DEMO_BRANCH_NAME
+                )
+                if existing_pr_url:
+                    logger.info(
+                        "fix_spec_agent_github_fallback_pr_found",
+                        pr_url=existing_pr_url,
+                    )
+                    # Persist and return before doing any LLM work.
+                    repo.update_remediation_draft(
+                        db,
+                        draft_id=draft_id,
+                        status="pr_created",
+                        branch_name=_DEMO_BRANCH_NAME,
+                        github_pr_url=existing_pr_url,
+                    )
+                    return existing_pr_url
 
             file_contents: dict[str, str] = {}
             for path in repo_context.read_paths:
@@ -482,12 +553,17 @@ async def run_fix_spec_agent(
             _validate_fix_spec_against_policy(fix_spec, policy)
             validate_fix_spec_code(fix_spec)
 
-        # Append a short draft-id suffix to guarantee branch uniqueness across
-        # retries / reruns.  Without this, a second run for the same service+date
-        # would hit GitHub 422 "PR already exists for that branch".
-        short_id = str(draft_id).replace("-", "")[:8]
-        branch = f"{fix_spec.branch_name}-{short_id}"
-        logger.info("fix_spec_agent_branch_name", branch=branch)
+        # Demo remediation uses a deterministic branch so repeated runs reuse
+        # the same branch and create_pull_request's "already exists" handling
+        # returns the existing PR URL.  Non-demo runs get a short draft-id suffix
+        # to guarantee uniqueness across retries.
+        is_demo = _is_demo_remediation(incident.service_name, selected_recommendation)
+        if is_demo:
+            branch = _DEMO_BRANCH_NAME
+        else:
+            short_id = str(draft_id).replace("-", "")[:8]
+            branch = f"{fix_spec.branch_name}-{short_id}"
+        logger.info("fix_spec_agent_branch_name", branch=branch, demo=is_demo)
 
         # ------------------------------------------------------------------
         # Stage 7: MCP session 2 (write) — create branch, files, PR
@@ -501,6 +577,7 @@ async def run_fix_spec_agent(
                 repo=repo_name,
                 branch=branch,
                 from_branch=settings.github_base_branch,
+                allow_existing=is_demo,
             )
 
             for fix_file in fix_spec.files:

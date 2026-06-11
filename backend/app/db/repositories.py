@@ -248,3 +248,36 @@ def list_remediation_drafts_for_run(db: Session, run_id: UUID) -> list[Remediati
         .order_by(RemediationDraft.created_at.desc())
         .all()
     )
+
+
+def find_demo_pr_created_draft(db: Session) -> RemediationDraft | None:
+    """
+    Return the most recent pr_created draft for the demo audit-service
+    schema_validation remediation, across ALL runs.
+
+    Used for idempotency: repeated "Create GitHub Draft PR" clicks on a
+    public demo return the existing PR rather than creating a new one.
+    Matches on service_name=audit-service + schema/validation keyword in
+    the recommendation — mirrors RemediationClassifier logic without importing it.
+    """
+    _SCHEMA_KEYWORDS = (
+        "schema", "validation", "validate", "compatibility",
+        "pre-deploy", "predeploy", "pre_deploy", "mismatch",
+    )
+    candidates = (
+        db.query(RemediationDraft)
+        .join(InvestigationRun, RemediationDraft.run_id == InvestigationRun.id)
+        .join(Incident, InvestigationRun.incident_id == Incident.id)
+        .filter(
+            RemediationDraft.status == "pr_created",
+            RemediationDraft.github_pr_url.isnot(None),
+            Incident.service_name == "audit-service",
+        )
+        .order_by(RemediationDraft.created_at.desc())
+        .all()
+    )
+    for draft in candidates:
+        rec = draft.selected_recommendation.lower()
+        if any(kw in rec for kw in _SCHEMA_KEYWORDS):
+            return draft
+    return None

@@ -105,6 +105,11 @@ export function RemediationDraftCard({ runId, recommendation }: RemediationDraft
     try {
       const created = await createRemediationDraft(runId, recommendation);
       setDraft(created);
+      // Backend is idempotent for the demo remediation — if a PR already
+      // exists it returns pr_created immediately. Open it straight away.
+      if (created.status === "pr_created" && created.github_pr_url) {
+        window.open(created.github_pr_url, "_blank", "noopener,noreferrer");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create draft");
     } finally {
@@ -116,27 +121,32 @@ export function RemediationDraftCard({ runId, recommendation }: RemediationDraft
   // Render
   // ---------------------------------------------------------------------------
 
-  // Nothing yet — show the "Draft PR" trigger.
+  // Nothing yet — show the "Create GitHub Draft PR" trigger.
   if (!draft) {
     return (
-      <div className="mt-3 flex items-center gap-3">
-        <Button
-          variant="default"
-          size="sm"
-          className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm"
-          onClick={handleDraftPR}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <GitPullRequest className="h-3.5 w-3.5" />
+      <div className="mt-3 space-y-1.5">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="default"
+            size="sm"
+            className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-sm"
+            onClick={handleDraftPR}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <GitPullRequest className="h-3.5 w-3.5" />
+            )}
+            {submitting ? "Creating draft…" : "Create GitHub Draft PR"}
+          </Button>
+          {error && (
+            <p className="text-xs text-red-500">{error}</p>
           )}
-          {submitting ? "Creating draft…" : "Draft PR"}
-        </Button>
-        {error && (
-          <p className="text-xs text-red-500">{error}</p>
-        )}
+        </div>
+        <p className="text-[11px] text-muted-foreground pl-0.5">
+          Creates or opens a draft PR for the demo remediation. Human review required.
+        </p>
       </div>
     );
   }
@@ -205,7 +215,7 @@ export function RemediationDraftCard({ runId, recommendation }: RemediationDraft
           >
             <Button variant="default" size="sm" className="h-7 gap-1.5 text-xs">
               <ExternalLink className="h-3 w-3" />
-              Open PR
+              Open GitHub Draft PR
             </Button>
           </a>
         )}

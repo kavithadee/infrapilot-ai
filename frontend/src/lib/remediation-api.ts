@@ -8,10 +8,18 @@
 // so the "Draft PR" button is only shown when the backend would accept it.
 // ---------------------------------------------------------------------------
 
+// Mirrors backend RemediationClassifier._BLOCKED_KEYWORDS exactly.
+// "roll back" (two words) is added to catch natural-language phrasing the
+// agent produces even though the backend blocks the one-word "rollback".
 const BLOCKED_KEYWORDS = [
-  "rollback", "secret", "kubectl", "migration",
-  "alter table", "drop table", "production mutation",
+  "rollback", "roll back", "revert",
+  "secret", "credential",
+  "kubectl", "helm",
+  "migration", "migrate",
+  "alter table", "drop table",
+  "production mutation",
   "bq update", "bq mk",
+  "rotate",
 ];
 
 const SCHEMA_VALIDATION_KEYWORDS = [

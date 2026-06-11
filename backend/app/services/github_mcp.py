@@ -267,6 +267,43 @@ async def list_directory(
         return []
 
 
+async def find_open_pr_for_branch(
+    session: ClientSession,
+    *,
+    owner: str,
+    repo: str,
+    branch: str,
+) -> str | None:
+    """
+    Return the HTML URL of an open PR for `branch`, or None if not found.
+
+    Uses list_pull_requests if available on the MCP server; silently returns
+    None on any error (tool missing, network failure, empty list).
+    This is a best-effort lookup used for demo idempotency only.
+    """
+    try:
+        result = await session.call_tool(
+            "list_pull_requests",
+            {"owner": owner, "repo": repo, "head": f"{owner}:{branch}", "state": "open"},
+        )
+        raw = _text_content(result)
+        parsed = json.loads(raw)
+        if isinstance(parsed, list) and parsed:
+            pr = parsed[0]
+            if isinstance(pr, dict) and "html_url" in pr:
+                logger.info(
+                    "github_mcp_found_existing_pr",
+                    branch=branch,
+                    pr_url=pr["html_url"],
+                )
+                return pr["html_url"]
+    except Exception as exc:
+        logger.debug(
+            "github_mcp_find_open_pr_unavailable", branch=branch, error=str(exc)
+        )
+    return None
+
+
 async def create_branch(
     session: ClientSession,
     *,
@@ -274,13 +311,26 @@ async def create_branch(
     repo: str,
     branch: str,
     from_branch: str,
+    allow_existing: bool = False,
 ) -> None:
-    """Create a new branch from from_branch."""
+    """
+    Create a new branch from from_branch.
+
+    If allow_existing=True, silently succeeds when the branch already exists
+    (GitHub returns 422). Used for deterministic demo branch naming so
+    repeated runs reuse the same branch rather than failing.
+    """
     logger.info("github_mcp_create_branch", branch=branch, from_branch=from_branch)
-    await session.call_tool(
-        "create_branch",
-        {"owner": owner, "repo": repo, "branch": branch, "from_branch": from_branch},
-    )
+    try:
+        await session.call_tool(
+            "create_branch",
+            {"owner": owner, "repo": repo, "branch": branch, "from_branch": from_branch},
+        )
+    except Exception as e:
+        if allow_existing and ("already exists" in str(e).lower() or "422" in str(e)):
+            logger.info("github_mcp_branch_already_exists", branch=branch)
+        else:
+            raise
 
 
 async def write_file(
